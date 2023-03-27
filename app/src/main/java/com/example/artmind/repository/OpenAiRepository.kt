@@ -3,10 +3,11 @@ package com.example.artmind.repository
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.example.artmind.BuildConfig
 
 import com.example.artmind.retrofit.OpenAiApi
 import com.example.artmind.retrofit.RequestBody
-import com.example.artmind.utils.Constants
+
 
 class OpenAiRepository(private val apiService: OpenAiApi) {
 
@@ -15,7 +16,7 @@ class OpenAiRepository(private val apiService: OpenAiApi) {
 
     suspend fun generateImages(prompt: String, n: Int?, size: String?) {
         val requestBody = RequestBody(prompt, n, size)
-        val response = apiService.generateImages(Constants.API_KEY, requestBody)
+        val response = apiService.generateImages(BuildConfig.OPENAI_API_KEY, requestBody)
         if (response.isSuccessful && response.body() != null) {
             val data = response.body()?.data
             val urls = data?.map { it.url } as ArrayList<String>?

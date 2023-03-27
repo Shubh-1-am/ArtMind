@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -18,44 +19,60 @@ import android.util.Log
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.Toast
+import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.content.ContentProviderCompat.requireContext
 import androidx.core.widget.ContentLoadingProgressBar
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.example.artmind.adapters.CustomAdapter
+import com.example.artmind.fragments.ImageHistoryFragment
 import com.example.artmind.interfaces.ImageDownloadListener
+import com.example.artmind.interfaces.ImageLoadListener
 import com.example.artmind.retrofit.RequestBody
 import com.example.artmind.retrofit.RetrofitHelper
+import com.example.artmind.viewmodels.ImageHistoryViewModel
+import com.example.artmind.viewmodels.ImageHistoryViewModelFactory
 import com.example.artmind.viewmodels.OpenAiViewModel
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
-class MainActivity : AppCompatActivity(), ImageDownloadListener {
-    private lateinit var viewModel: OpenAiViewModel
+class MainActivity : AppCompatActivity(), ImageDownloadListener, ImageLoadListener {
+    private lateinit var openAiViewModel: OpenAiViewModel
+    private lateinit var imageHistoryViewModel: ImageHistoryViewModel
     private lateinit var adapter: CustomAdapter
     private lateinit var promptEditText: TextInputEditText
     private lateinit var numberOfImagesInput: TextInputEditText
     private lateinit var slider: Slider
     private lateinit var generateButton: MaterialButton
     private lateinit var progressBar: ProgressBar
+    private lateinit var history: ImageView
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        viewModel = ViewModelProvider(this)[OpenAiViewModel::class.java]
+        openAiViewModel = ViewModelProvider(this)[OpenAiViewModel::class.java]
+        val viewModelFactory = ImageHistoryViewModelFactory(application)
+        imageHistoryViewModel = ViewModelProvider(this, viewModelFactory)[ImageHistoryViewModel::class.java]
         val recyclerView = findViewById<RecyclerView>(R.id.recyclerView)
         adapter = CustomAdapter(ArrayList(), this)
         recyclerView.adapter = adapter
         recyclerView.layoutManager = GridLayoutManager(this, 2)
 
         progressBar = findViewById(R.id.progress_bar)
+        history = findViewById(R.id.history)
         promptEditText = findViewById(R.id.prompt_edit_text)
         slider = findViewById(R.id.number_picker_slider)
         numberOfImagesInput = findViewById(R.id.number_picker_input)
@@ -85,12 +102,10 @@ class MainActivity : AppCompatActivity(), ImageDownloadListener {
         slider.addOnChangeListener { _, value, _ ->
             numberOfImagesInput.setText(value.toInt().toString())
         }
-
         generateButton = findViewById(R.id.generateButton)
 
 
         generateButton.setOnClickListener {
-
             progressBar.visibility = View.VISIBLE
             if (isNetworkConnected()){
                 val promptText = promptEditText.text.toString()
@@ -102,15 +117,13 @@ class MainActivity : AppCompatActivity(), ImageDownloadListener {
                     progressBar.visibility = View.GONE
                     return@setOnClickListener
                 }
-
-
                 if (numberOfImages == null) {
                     numberOfImages = 1
                     numberOfImagesInput.text = Editable.Factory.getInstance().newEditable(numberOfImages.toString())
                 }
 
                 lifecycleScope.launch{
-                    viewModel.generateImages(promptText, numberOfImages, imageSize).observe(this@MainActivity) { images ->
+                    openAiViewModel.generateImages(promptText, numberOfImages, imageSize).observe(this@MainActivity) { images ->
                         adapter.updateData(images)
                         progressBar.visibility = View.GONE
                     }
@@ -120,6 +133,15 @@ class MainActivity : AppCompatActivity(), ImageDownloadListener {
                 Toast.makeText(this, "No internet connection", Toast.LENGTH_SHORT).show()
             }
         }
+
+        history.setOnClickListener(View.OnClickListener {
+            val childViewContainer = findViewById<CoordinatorLayout>(R.id.activity_main_coordinator_layout)
+            childViewContainer.visibility = View.GONE
+            val fragment = ImageHistoryFragment.newInstance(imageHistoryViewModel)
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.main_conatiner, fragment)
+                .commit()
+        })
     }
 
     private fun isNetworkConnected(): Boolean {
@@ -151,6 +173,29 @@ class MainActivity : AppCompatActivity(), ImageDownloadListener {
         registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
     }
 
+
+    override fun onImageLoad(url: String?) {
+        url?.let{
+            lifecycleScope.launch(Dispatchers.IO) {
+                try{
+                    val bitmap = Glide.with(this@MainActivity)
+                        .asBitmap()
+                        .load(url)
+                        .submit()
+                        .get()
+                    val fileName = "image_${System.currentTimeMillis()}.jpg"
+                    val file = File(this@MainActivity.filesDir, fileName)
+                    val fos = FileOutputStream(file)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos)
+                    fos.flush()
+                    fos.close()
+                    imageHistoryViewModel.insertImage(file.absolutePath)
+                } catch (e: Exception){
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
 }
 
 //        val imageSizes = arrayOf("256x256", "512x512", "1024x1024")
