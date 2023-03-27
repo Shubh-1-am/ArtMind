@@ -27,3 +27,13 @@ defaultConfig {
 - Offline mode support: generated images will be saved locally and can be viewed and downloaded without an internet connection
 
 
+## Screenshots
+
+![App Screenshot 1](https://github.com/Shubh-1-am/ArtMind/blob/main/Screenshots/1.jpeg)
+
+![App Screenshot 2](https://github.com/Shubh-1-am/ArtMind/blob/main/Screenshots/2.jpeg)
+
+![App Screenshot 3](https://github.com/Shubh-1-am/ArtMind/blob/main/Screenshots/3.jpeg)
+
+
+
